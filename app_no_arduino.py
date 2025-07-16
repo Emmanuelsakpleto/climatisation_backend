@@ -11,11 +11,20 @@ import math
 app = Flask(__name__)
 CORS(app)  # Activer CORS pour permettre les requêtes depuis le frontend
 
-# Connexion Arduino (ajuste 'COM3' selon ton port)
+# Connexion Arduino (ajuste 'COM5' selon ton port)
 try:
-    arduino = serial.Serial('COM3', 9600, timeout=1)
-except:
+    arduino = serial.Serial('COM5', 9600, timeout=3)
+    time.sleep(2)  # Attendre que l'Arduino soit prêt
+    print("✅ Arduino connecté sur COM5")
+    
+    # Test de communication
+    arduino.write(b'G')  # Test LED verte
+    time.sleep(0.5)
+    
+except Exception as e:
     arduino = None  # Simuler si Arduino non connecté
+    print(f"❌ Arduino non connecté sur COM5: {e}")
+    print("🔧 Mode simulation activé")
 
 def get_simulated_data():
     """Génère des données simulées réalistes"""
@@ -37,8 +46,24 @@ def system_status():
     # Lire données Arduino (ou simuler si non connecté)
     if arduino:
         try:
-            data = read_arduino_data(arduino)
-        except:
+            # Vider le buffer série pour avoir des données fraîches
+            arduino.flushInput()
+            
+            # Attendre les nouvelles données
+            attempts = 0
+            while attempts < 5:
+                try:
+                    data = read_arduino_data(arduino)
+                    break
+                except Exception as e:
+                    attempts += 1
+                    if attempts >= 5:
+                        print(f"⚠️ Erreur lecture Arduino: {e}")
+                        data = get_simulated_data()
+                    time.sleep(0.2)
+            
+        except Exception as e:
+            print(f"⚠️ Erreur Arduino: {e}")
             data = get_simulated_data()
     else:
         data = get_simulated_data()
@@ -47,10 +72,15 @@ def system_status():
     mode = decide_mode(data['ensoleillement'], data['debit'])
     leak_detected, leak_details = detect_leak(data['pression'], data['niveau_eau'])
 
-    # Commande LED (simulation)
+    # Commande LED (Arduino réel ou simulation)
     led_command = 'G' if mode == 'Solaire' and not leak_detected else 'B' if mode == 'Compression' and not leak_detected else 'R'
+    
     if arduino:
-        arduino.write(led_command.encode())
+        try:
+            arduino.write(led_command.encode())
+            print(f"📡 LED Command envoyée: {led_command} ({'Green' if led_command == 'G' else 'Blue' if led_command == 'B' else 'Red'})")
+        except Exception as e:
+            print(f"⚠️ Erreur envoi commande LED: {e}")
     else:
         print(f"[SIMULATION] LED Command: {led_command} ({'Green' if led_command == 'G' else 'Blue' if led_command == 'B' else 'Red'})")
 
@@ -78,14 +108,20 @@ def control():
         return jsonify({'error': 'Mode invalide'}), 400
     
     led_command = 'G' if mode == 'Solaire' else 'B'
+    
     if arduino:
-        arduino.write(led_command.encode())
+        try:
+            arduino.write(led_command.encode())
+            print(f"📡 Contrôle manuel - LED Command: {led_command} ({'Green' if led_command == 'G' else 'Blue'})")
+        except Exception as e:
+            print(f"⚠️ Erreur contrôle manuel: {e}")
     else:
         print(f"[SIMULATION] Manual LED Command: {led_command} ({'Green' if led_command == 'G' else 'Blue'})")
     
     return jsonify({
         'status': 'Mode forcé', 
         'mode': mode,
+        'led_command': led_command,
         'arduino_connected': arduino is not None
     })
 
