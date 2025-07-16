@@ -1,9 +1,10 @@
 // Arduino Uno : Simulation avancée avec potentiomètres
-// Simulation des modes et détection de fuites
+// Gestion des modes : Solaire, Compression, Hybride, Automatique
 
-#define LED_GREEN 9  // Mode solaire
-#define LED_BLUE 10  // Mode compression
-#define LED_RED 11   // Fuite/anomalie
+#define LED_GREEN 9     // Mode solaire
+#define LED_BLUE 10     // Mode compression  
+#define LED_RED 11      // Fuite/anomalie
+#define LED_YELLOW 12   // Mode hybride (optionnel)
 
 // Potentiomètres
 #define POT_DEBIT A0
@@ -14,9 +15,11 @@
 
 // Variables pour la simulation
 float debit, pression, niveau_eau, ensoleillement, temperature;
-String current_mode = "Compression";
+String current_mode = "Automatique";
 bool leak_detected = false;
-bool auto_mode = true;  // Mode automatique par défaut
+bool auto_mode = true;
+bool hybrid_toggle = false;  // Pour alterner les LEDs en mode hybride
+unsigned long last_hybrid_toggle = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -25,17 +28,26 @@ void setup() {
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
   pinMode(LED_RED, OUTPUT);
+  if (LED_YELLOW != LED_RED) pinMode(LED_YELLOW, OUTPUT);
   
   // Test LEDs au démarrage
   digitalWrite(LED_GREEN, HIGH);
   delay(200);
   digitalWrite(LED_GREEN, LOW);
+  
   digitalWrite(LED_BLUE, HIGH);
   delay(200);
   digitalWrite(LED_BLUE, LOW);
+  
   digitalWrite(LED_RED, HIGH);
   delay(200);
   digitalWrite(LED_RED, LOW);
+  
+  if (LED_YELLOW != LED_RED) {
+    digitalWrite(LED_YELLOW, HIGH);
+    delay(200);
+    digitalWrite(LED_YELLOW, LOW);
+  }
   
   Serial.println("ARDUINO_READY");
 }
@@ -48,16 +60,18 @@ void loop() {
   ensoleillement = map(analogRead(POT_ENSOLEILLEMENT), 0, 1023, 0, 1000);
   temperature = map(analogRead(POT_TEMPERATURE), 0, 1023, 18, 32);
 
-  // Logique automatique de décision de mode (comme dans le backend)
+  // Logique automatique de décision de mode (amélioration)
   if (auto_mode) {
-    if (ensoleillement > 300 && debit > 40) {
+    if (ensoleillement > 500 && debit > 45 && temperature < 26) {
       current_mode = "Solaire";
+    } else if (ensoleillement > 200 && debit > 30 && temperature < 30) {
+      current_mode = "Hybride";
     } else {
       current_mode = "Compression";
     }
   }
   
-  // Détection de fuite (comme dans le backend)
+  // Détection de fuite améliorée
   leak_detected = (pression < 1.5 || niveau_eau < 50);
   
   // Contrôle des LEDs selon le mode et l'état
@@ -77,6 +91,7 @@ void updateLEDs() {
   digitalWrite(LED_GREEN, LOW);
   digitalWrite(LED_BLUE, LOW);
   digitalWrite(LED_RED, LOW);
+  if (LED_YELLOW != LED_RED) digitalWrite(LED_YELLOW, LOW);
   
   // Priorité à la fuite (LED rouge)
   if (leak_detected) {
@@ -87,6 +102,23 @@ void updateLEDs() {
       digitalWrite(LED_GREEN, HIGH);
     } else if (current_mode == "Compression") {
       digitalWrite(LED_BLUE, HIGH);
+    } else if (current_mode == "Hybride") {
+      // Mode hybride - alternance ou combinaison
+      if (millis() - last_hybrid_toggle > 1000) {
+        hybrid_toggle = !hybrid_toggle;
+        last_hybrid_toggle = millis();
+      }
+      
+      if (hybrid_toggle) {
+        digitalWrite(LED_GREEN, HIGH);
+      } else {
+        digitalWrite(LED_BLUE, HIGH);
+      }
+      
+      // Ou allumer LED_YELLOW si disponible
+      if (LED_YELLOW != LED_RED) {
+        digitalWrite(LED_YELLOW, HIGH);
+      }
     }
   }
 }
@@ -108,23 +140,23 @@ void handleBackendCommands() {
       case 'G':  // Mode solaire forcé
         current_mode = "Solaire";
         auto_mode = false;
-        digitalWrite(LED_GREEN, HIGH);
-        digitalWrite(LED_BLUE, LOW);
         Serial.println("LED:GREEN");
         break;
         
       case 'B':  // Mode compression forcé
         current_mode = "Compression";
         auto_mode = false;
-        digitalWrite(LED_BLUE, HIGH);
-        digitalWrite(LED_GREEN, LOW);
         Serial.println("LED:BLUE");
         break;
         
+      case 'H':  // Mode hybride forcé
+        current_mode = "Hybride";
+        auto_mode = false;
+        Serial.println("LED:HYBRID");
+        break;
+        
       case 'R':  // Alerte fuite
-        digitalWrite(LED_RED, HIGH);
-        digitalWrite(LED_GREEN, LOW);
-        digitalWrite(LED_BLUE, LOW);
+        leak_detected = true;
         Serial.println("LED:RED");
         break;
         
@@ -137,6 +169,7 @@ void handleBackendCommands() {
         digitalWrite(LED_GREEN, LOW);
         digitalWrite(LED_BLUE, LOW);
         digitalWrite(LED_RED, LOW);
+        if (LED_YELLOW != LED_RED) digitalWrite(LED_YELLOW, LOW);
         Serial.println("LED:OFF");
         break;
     }

@@ -4,3 +4,5 @@ pyserial==3.5
 scikit-learn 
 pandas
 numpy
+Pillow
+requests
