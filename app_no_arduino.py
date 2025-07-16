@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from utils.serial_reader import read_arduino_data
 from utils.image_processor import get_thermal_image
 from models.rules_simple import decide_mode, detect_leak
@@ -8,6 +9,7 @@ import time
 import math
 
 app = Flask(__name__)
+CORS(app)  # Activer CORS pour permettre les requêtes depuis le frontend
 
 # Connexion Arduino (ajuste 'COM3' selon ton port)
 try:
