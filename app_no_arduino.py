@@ -11,20 +11,33 @@ import math
 app = Flask(__name__)
 CORS(app)  # Activer CORS pour permettre les requêtes depuis le frontend
 
-# Connexion Arduino (ajuste 'COM5' selon ton port)
-try:
-    arduino = serial.Serial('COM5', 9600, timeout=3)
-    time.sleep(2)  # Attendre que l'Arduino soit prêt
-    print("✅ Arduino connecté sur COM5")
-    
-    # Test de communication
-    arduino.write(b'G')  # Test LED verte
-    time.sleep(0.5)
-    
-except Exception as e:
-    arduino = None  # Simuler si Arduino non connecté
-    print(f"❌ Arduino non connecté sur COM5: {e}")
-    print("🔧 Mode simulation activé")
+# Connexion Arduino avec reconnexion automatique
+arduino = None
+arduino_port = 'COM5'
+
+def connect_arduino():
+    """Tentative de connexion à l'Arduino"""
+    global arduino
+    try:
+        if arduino:
+            arduino.close()
+        arduino = serial.Serial(arduino_port, 9600, timeout=3)
+        time.sleep(2)  # Attendre que l'Arduino soit prêt
+        print("✅ Arduino connecté sur COM5")
+        
+        # Test de communication
+        arduino.write(b'G')  # Test LED verte
+        time.sleep(0.5)
+        return True
+        
+    except Exception as e:
+        arduino = None
+        print(f"❌ Arduino non connecté sur COM5: {e}")
+        print("🔧 Mode simulation activé")
+        return False
+
+# Première tentative de connexion
+connect_arduino()
 
 def get_simulated_data():
     """Génère des données simulées réalistes"""
@@ -43,7 +56,9 @@ def get_simulated_data():
 
 @app.route('/api/system-status', methods=['GET'])
 def system_status():
-    # Lire données Arduino (ou simuler si non connecté)
+    global arduino
+    
+    # Essayer de lire les données Arduino avec reconnexion automatique
     if arduino:
         try:
             # Vider le buffer série pour avoir des données fraîches
@@ -64,7 +79,19 @@ def system_status():
             
         except Exception as e:
             print(f"⚠️ Erreur Arduino: {e}")
-            data = get_simulated_data()
+            # Tentative de reconnexion
+            if "PermissionError" in str(e) or "SerialException" in str(e):
+                print("🔄 Tentative de reconnexion...")
+                if connect_arduino():
+                    # Retry après reconnexion
+                    try:
+                        data = read_arduino_data(arduino)
+                    except:
+                        data = get_simulated_data()
+                else:
+                    data = get_simulated_data()
+            else:
+                data = get_simulated_data()
     else:
         data = get_simulated_data()
 
