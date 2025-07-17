@@ -16,6 +16,7 @@ import os
 # Ajouter le répertoire utils au path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
 from data_simulator import get_random_simulated_data
+import joblib
 
 # Créer l'application Flask
 app = Flask(__name__)
@@ -42,6 +43,14 @@ system_data = {
     "leak_detected": False,
     "last_update": datetime.now().isoformat()
 }
+
+# Charger le modèle IA DecisionTree
+try:
+    decision_tree = joblib.load('decision_tree_mode.pkl')
+    print("✅ Modèle IA chargé pour le mode automatique")
+except Exception as e:
+    decision_tree = None
+    print(f"❌ Impossible de charger le modèle IA: {e}")
 
 def simulate_sensor_data():
     """Simule les données des capteurs"""
@@ -85,8 +94,18 @@ def simulate_sensor_data():
     # Mettre à jour le timestamp
     system_data["last_update"] = datetime.now().isoformat()
 
-def decide_mode_simple(temperature):
-    """Décision simple de mode basée sur la température"""
+
+def decide_mode_ia(ensoleillement, debit, temperature, forced_mode=None):
+    """
+    Décision du mode via IA (DecisionTree) ou mode forcé
+    """
+    if forced_mode:
+        return forced_mode
+    if decision_tree:
+        features = [[ensoleillement, debit, temperature]]
+        mode_pred = decision_tree.predict(features)[0]
+        return mode_pred
+    # Fallback sur la règle simple si pas de modèle IA
     if temperature < 20:
         return "solar"
     elif temperature > 28:
@@ -103,14 +122,15 @@ def get_system_status():
     
     simulate_sensor_data()
     
-    # Décider du mode si en automatique
-    if current_forced_mode is None:
-        recommended_mode = decide_mode_simple(system_data["temperature"])
-        logger.info(f"[AUTO] Mode automatique - Mode recommandé: {recommended_mode} (temp: {system_data['temperature']}°C)")
-    else:
-        recommended_mode = current_forced_mode
-        logger.info(f"[FORCE] Mode forcé actif: {recommended_mode}")
-    
+    # Décider du mode via IA ou mode forcé
+    recommended_mode = decide_mode_ia(
+        system_data.get("ensoleillement", 0),
+        system_data.get("debit", 0),
+        system_data["temperature"],
+        current_forced_mode
+    )
+    logger.info(f"[AUTO] Mode IA ou forcé - Mode recommandé: {recommended_mode} (temp: {system_data['temperature']}°C)")
+
     response_data = {
         "status": "online",
         "mode": recommended_mode,
@@ -130,12 +150,12 @@ def get_system_status():
         "thermal_image": None,
         "leak_details": {}
     }
-    
+
     logger.info(f"[RESP] /api/status - Mode: {recommended_mode}, Temp: {system_data['temperature']}°C, Humidité: {system_data['humidity']}%")
-    
+
     if system_data["leak_detected"]:
         logger.warning("[ALERT] Fuite détectée!")
-    
+
     return jsonify(response_data)
 
 @app.route('/api/mode', methods=['GET'])
@@ -205,10 +225,13 @@ def get_history():
     for i in range(10):
         timestamp = datetime.now().timestamp() - (i * 300)  # Toutes les 5 minutes
         temp = 22.5 + math.sin(timestamp / 60) * 3 + random.uniform(-0.5, 0.5)
+        ensoleillement = random.randint(200, 1000)
+        debit = random.randint(45, 75)
+        mode = decide_mode_ia(ensoleillement, debit, temp)
         history.append({
             "timestamp": datetime.fromtimestamp(timestamp).isoformat(),
             "temperature": round(temp, 1),
-            "mode": decide_mode_simple(temp),
+            "mode": mode,
             "leak_detected": random.random() < 0.01
         })
     

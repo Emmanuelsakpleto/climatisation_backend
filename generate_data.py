@@ -11,14 +11,20 @@ data = {
     'debit': np.random.uniform(40, 60, n_rows),           # 40-60 L/min
     'pression': np.random.uniform(1.0, 3.0, n_rows),      # 1.0-3.0 bars
     'niveau_eau': np.random.uniform(45, 90, n_rows),      # 45-90 %
-    'temperature': np.random.uniform(20, 30, n_rows),     # 20-30 °C
+    'temperature': np.random.uniform(32, 45, n_rows),     # 32-45 °C
     'mode': []
 }
 
 # Appliquer règle pour déterminer le mode
 for i in range(n_rows):
-    if data['ensoleillement'][i] > 300 and data['debit'][i] > 40:
+    ens = data['ensoleillement'][i]
+    deb = data['debit'][i]
+    temp = data['temperature'][i]
+    # Logique Arduino : Solaire si ensoleillement >= 800, Hybride si 400 <= ensoleillement < 800, Compression sinon
+    if ens >= 800 and deb >= 40 and temp <= 45:
         data['mode'].append('Solaire')
+    elif ens >= 400 and ens < 800 and deb >= 40 and temp <= 45:
+        data['mode'].append('Hybride')
     else:
         data['mode'].append('Compression')
 

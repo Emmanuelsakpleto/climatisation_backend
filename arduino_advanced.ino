@@ -1,6 +1,3 @@
-// Arduino Uno : Simulation avancée avec potentiomètres
-// Gestion des modes : Solaire, Compression, Hybride, Automatique
-
 #define LED_GREEN 9     // Mode solaire
 #define LED_BLUE 10     // Mode compression  
 #define LED_RED 11      // Fuite/anomalie
@@ -60,11 +57,11 @@ void loop() {
   ensoleillement = map(analogRead(POT_ENSOLEILLEMENT), 0, 1023, 0, 1000);
   temperature = map(analogRead(POT_TEMPERATURE), 0, 1023, 32, 40);  // Burkina: 32-40°C
 
-  // Logique automatique de décision de mode (amélioration)
+  // Logique automatique de décision de mode (corrigée)
   if (auto_mode) {
-    if (ensoleillement > 500 && debit > 45 && temperature < 26) {
+    if (ensoleillement >= 800 && debit >= 40 && temperature <= 45) {
       current_mode = "Solaire";
-    } else if (ensoleillement > 200 && debit > 30 && temperature < 30) {
+    } else if (ensoleillement >= 400 && ensoleillement < 800 && debit >= 40 && temperature <= 45) {
       current_mode = "Hybride";
     } else {
       current_mode = "Compression";
@@ -72,7 +69,7 @@ void loop() {
   }
   
   // Détection de fuite améliorée
-  leak_detected = (pression < 1.5 || niveau_eau < 50);
+  leak_detected = (pression < 1.5 && niveau_eau < 50 && debit < 30);
   
   // Contrôle des LEDs selon le mode et l'état
   updateLEDs();

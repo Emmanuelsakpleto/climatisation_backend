@@ -30,5 +30,5 @@ def get_random_simulated_data():
             'pression': 2.5,
             'niveau_eau': 80.0,
             'ensoleillement': 800.0,
-            'temperature': 24.0
+            'temperature': 37.0
         }
