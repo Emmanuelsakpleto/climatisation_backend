@@ -1,31 +1,32 @@
 def calculate_humidity(temperature, ensoleillement, niveau_eau):
     """
     Calcule l'humidité relative basée sur les autres métriques physiques
+    Ajusté pour le climat tropical du Burkina Faso
     
     Args:
-        temperature: Température en °C
+        temperature: Température en °C (32-40°C)
         ensoleillement: Ensoleillement en W/m²
         niveau_eau: Niveau d'eau en %
     
     Returns:
         float: Humidité relative en %
     """
-    base_humidity = 65  # Humidité de base
+    base_humidity = 45  # Humidité de base plus basse pour climat chaud et sec
     
-    # Facteur température : plus chaud = moins humide
-    temp_factor = (30 - temperature) * 2
+    # Facteur température : plus chaud = moins humide (ajusté pour 32-40°C)
+    temp_factor = (40 - temperature) * 1.5
     
     # Facteur ensoleillement : plus de soleil = moins humide
-    sun_factor = (ensoleillement / 1000) * -10
+    sun_factor = (ensoleillement / 1000) * -8
     
     # Facteur niveau d'eau : plus d'eau = plus humide
-    water_factor = (niveau_eau - 50) * 0.3
+    water_factor = (niveau_eau - 50) * 0.4
     
-    # Calcul final avec limites réalistes
+    # Calcul final avec limites réalistes pour climat tropical
     humidity = base_humidity + temp_factor + sun_factor + water_factor
     
-    # Limiter entre 20% et 90%
-    return max(20, min(90, round(humidity, 1)))
+    # Limiter entre 15% et 85% (climat sec)
+    return max(15, min(85, round(humidity, 1)))
 
 def read_arduino_data(arduino):
     """

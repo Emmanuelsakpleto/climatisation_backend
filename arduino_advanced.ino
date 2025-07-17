@@ -53,12 +53,12 @@ void setup() {
 }
 
 void loop() {
-  // Lire les potentiomètres avec conversion en valeurs réalistes
+  // Lire les potentiomètres avec conversion en valeurs réalistes (Burkina Faso)
   debit = map(analogRead(POT_DEBIT), 0, 1023, 30, 70);
   pression = map(analogRead(POT_PRESSION), 0, 1023, 10, 35) / 10.0;  // 1.0 à 3.5 bar
   niveau_eau = map(analogRead(POT_NIVEAU), 0, 1023, 30, 100);
   ensoleillement = map(analogRead(POT_ENSOLEILLEMENT), 0, 1023, 0, 1000);
-  temperature = map(analogRead(POT_TEMPERATURE), 0, 1023, 18, 32);
+  temperature = map(analogRead(POT_TEMPERATURE), 0, 1023, 32, 40);  // Burkina: 32-40°C
 
   // Logique automatique de décision de mode (amélioration)
   if (auto_mode) {
