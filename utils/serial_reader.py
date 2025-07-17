@@ -1,3 +1,32 @@
+def calculate_humidity(temperature, ensoleillement, niveau_eau):
+    """
+    Calcule l'humidité relative basée sur les autres métriques physiques
+    
+    Args:
+        temperature: Température en °C
+        ensoleillement: Ensoleillement en W/m²
+        niveau_eau: Niveau d'eau en %
+    
+    Returns:
+        float: Humidité relative en %
+    """
+    base_humidity = 65  # Humidité de base
+    
+    # Facteur température : plus chaud = moins humide
+    temp_factor = (30 - temperature) * 2
+    
+    # Facteur ensoleillement : plus de soleil = moins humide
+    sun_factor = (ensoleillement / 1000) * -10
+    
+    # Facteur niveau d'eau : plus d'eau = plus humide
+    water_factor = (niveau_eau - 50) * 0.3
+    
+    # Calcul final avec limites réalistes
+    humidity = base_humidity + temp_factor + sun_factor + water_factor
+    
+    # Limiter entre 20% et 90%
+    return max(20, min(90, round(humidity, 1)))
+
 def read_arduino_data(arduino):
     """
     Lit les données Arduino - Compatible avec l'ancien et nouveau format
@@ -57,6 +86,12 @@ def read_arduino_data(arduino):
             missing_keys = [key for key in required_keys if key not in data]
             
             if not missing_keys:
+                # Calculer l'humidité basée sur les autres métriques
+                data['humidity'] = calculate_humidity(
+                    data['temperature'], 
+                    data['ensoleillement'], 
+                    data['niveau_eau']
+                )
                 return data
             else:
                 # Afficher les données reçues pour debug
