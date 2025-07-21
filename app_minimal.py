@@ -12,10 +12,11 @@ import logging
 from datetime import datetime
 import sys
 import os
+import serial
 
 # Ajouter le répertoire utils au path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
-from data_simulator import get_random_simulated_data
+from utils.data_simulator import get_random_simulated_data
 import joblib
 
 # Créer l'application Flask
@@ -44,6 +45,28 @@ system_data = {
     "last_update": datetime.now().isoformat()
 }
 
+# Configuration Arduino
+arduino = None
+arduino_port = 'COM5'
+
+def connect_arduino():
+    global arduino
+    try:
+        if arduino:
+            arduino.close()
+        arduino = serial.Serial(arduino_port, 9600, timeout=3)
+        time.sleep(2)
+        print(f"✅ Arduino connecté sur {arduino_port}")
+        return True
+    except Exception as e:
+        arduino = None
+        print(f"❌ Arduino non connecté sur {arduino_port}: {e}")
+        print("🔧 Mode simulation activé")
+        return False
+
+# Connexion initiale à l'Arduino
+connect_arduino()
+
 # Charger le modèle IA DecisionTree
 try:
     decision_tree = joblib.load('decision_tree_mode.pkl')
@@ -52,46 +75,73 @@ except Exception as e:
     decision_tree = None
     print(f"❌ Impossible de charger le modèle IA: {e}")
 
-def simulate_sensor_data():
-    """Simule les données des capteurs"""
-    global system_data
-    
-    # Obtenir des données simulées depuis le CSV
+def read_arduino_data():
+    """Lit les données réelles depuis l'Arduino, ou simule si non connecté"""
+    global system_data, arduino
+    if arduino:
+        try:
+            arduino.flushInput()
+            line = arduino.readline().decode('utf-8').strip()
+            if not line:
+                raise Exception("Aucune donnée reçue")
+            # Format attendu: DEBIT:xx,PRESSION:xx,NIVEAU:xx,ENSOLEILLEMENT:xx,TEMPERATURE:xx
+            data = {}
+            pairs = line.split(',')
+            for pair in pairs:
+                if ':' in pair:
+                    key, value = pair.split(':', 1)
+                    key = key.strip().upper()
+                    if key == 'DEBIT':
+                        data['debit'] = float(value)
+                    elif key == 'PRESSION':
+                        data['pression'] = float(value)
+                    elif key == 'NIVEAU':
+                        data['niveau_eau'] = float(value)
+                    elif key == 'ENSOLEILLEMENT':
+                        data['ensoleillement'] = float(value)
+                    elif key == 'TEMPERATURE':
+                        data['temperature'] = float(value)
+            # Vérifier que toutes les données sont présentes
+            required = ['debit', 'pression', 'niveau_eau', 'ensoleillement', 'temperature']
+            if all(k in data for k in required):
+                system_data['debit'] = data['debit']
+                system_data['pression_bars'] = data['pression']
+                system_data['niveau_eau'] = data['niveau_eau']
+                system_data['ensoleillement'] = data['ensoleillement']
+                system_data['temperature'] = data['temperature']
+                # Simuler l'humidité et la fuite
+                system_data['humidity'] = round(65 + random.uniform(-5, 5), 1)
+                system_data['leak_detected'] = (data['pression'] < 1.5 and data['niveau_eau'] < 50 and data['debit'] < 30)
+                system_data['last_update'] = datetime.now().isoformat()
+                logger.info(f"[DATA] Arduino: {line}")
+                return
+            else:
+                raise Exception(f"Clés manquantes: {data}")
+        except Exception as e:
+            logger.warning(f"[DATA] Erreur Arduino, fallback sur simulation: {e}")
+    # Fallback sur simulation CSV
     try:
         csv_data = get_random_simulated_data()
-        
-        # Utiliser les données du CSV
         system_data["temperature"] = csv_data["temperature"]
-        system_data["humidity"] = round(65 + random.uniform(-5, 5), 1)  # Humidité pas dans le CSV
+        system_data["humidity"] = round(65 + random.uniform(-5, 5), 1)
         system_data["pressure"] = round(1013.25 + random.uniform(-2, 2), 2)
-        
-        # Mettre à jour les données supplémentaires avec les valeurs du CSV
         system_data["ensoleillement"] = csv_data["ensoleillement"]
         system_data["debit"] = csv_data["debit"]
         system_data["niveau_eau"] = csv_data["niveau_eau"]
         system_data["pression_bars"] = csv_data["pression"]
-        
         logger.info(f"[DATA] Données CSV utilisées - Temp: {csv_data['temperature']}°C, Ensoleillement: {csv_data['ensoleillement']}W/m²")
-        
     except Exception as e:
         logger.warning(f"[DATA] Erreur CSV, fallback sur simulation: {e}")
-        # Fallback sur l'ancienne méthode
         base_temp = 22.5
         variation = math.sin(time.time() / 60) * 3
         system_data["temperature"] = round(base_temp + variation + random.uniform(-0.5, 0.5), 1)
         system_data["humidity"] = round(65 + random.uniform(-5, 5), 1)
         system_data["pressure"] = round(1013.25 + random.uniform(-2, 2), 2)
-        
-        # Données par défaut
         system_data["ensoleillement"] = random.randint(200, 1000)
         system_data["debit"] = random.randint(45, 75)
         system_data["niveau_eau"] = random.randint(60, 95)
         system_data["pression_bars"] = system_data["pressure"] / 1000
-    
-    # Simuler la détection de fuite (rare)
-    system_data["leak_detected"] = random.random() < 0.01  # 1% de chance
-    
-    # Mettre à jour le timestamp
+    system_data["leak_detected"] = random.random() < 0.01
     system_data["last_update"] = datetime.now().isoformat()
 
 
@@ -119,9 +169,7 @@ def decide_mode_ia(ensoleillement, debit, temperature, forced_mode=None):
 def get_system_status():
     """Retourne l'état actuel du système"""
     logger.info("[GET] Requête /api/status reçue")
-    
-    simulate_sensor_data()
-    
+    read_arduino_data()
     # Décider du mode via IA ou mode forcé
     recommended_mode = decide_mode_ia(
         system_data.get("ensoleillement", 0),
@@ -136,16 +184,14 @@ def get_system_status():
         "mode": recommended_mode,
         "temperature": system_data["temperature"],
         "humidity": system_data["humidity"],
-        "pressure": system_data["pressure"],
+        "pression": system_data.get("pression_bars", system_data["pressure"] / 1000),
+        "debit": system_data.get("debit", random.randint(45, 75)),
+        "niveau_eau": system_data.get("niveau_eau", random.randint(60, 95)),
+        "ensoleillement": system_data.get("ensoleillement", random.randint(200, 1000)),
         "leak_detected": system_data["leak_detected"],
-        "arduino_connected": False,  # Simulation
+        "arduino_connected": arduino is not None,
         "forced_mode": current_forced_mode,
         "timestamp": system_data["last_update"],
-        # Champs supplémentaires pour le frontend (maintenant depuis CSV)
-        "ensoleillement": system_data.get("ensoleillement", random.randint(200, 1000)),
-        "debit": system_data.get("debit", random.randint(45, 75)),
-        "pression": system_data.get("pression_bars", system_data["pressure"] / 1000),
-        "niveau_eau": system_data.get("niveau_eau", random.randint(60, 95)),
         "mode_forced": current_forced_mode is not None,
         "thermal_image": None,
         "leak_details": {}
@@ -311,7 +357,7 @@ if __name__ == '__main__':
     print("�🔧 Appuyez sur Ctrl+C pour arrêter")
     
     try:
-        app.run(host='0.0.0.0', port=5000, debug=True)
+        app.run(host='0.0.0.0', port=5000, debug=False)
     except KeyboardInterrupt:
         logger.info("[STOP] Serveur arrêté par l'utilisateur")
         print("\n🛑 Serveur arrêté")

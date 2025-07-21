@@ -1,7 +1,7 @@
 #define LED_GREEN 9     // Mode solaire
 #define LED_BLUE 10     // Mode compression  
 #define LED_RED 11      // Fuite/anomalie
-#define LED_YELLOW 12   // Mode hybride (optionnel)
+#define LED_YELLOW 12   // Mode hybride
 
 // Potentiomètres
 #define POT_DEBIT A0
