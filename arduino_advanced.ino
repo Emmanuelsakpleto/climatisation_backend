@@ -150,7 +150,8 @@ void sendDataToBackend() {
   Serial.print(",PRESSION:"); Serial.print(pression, 2);
   Serial.print(",NIVEAU:"); Serial.print(niveau_eau, 2);
   Serial.print(",ENSOLEILLEMENT:"); Serial.print(ensoleillement, 2);
-  Serial.print(",TEMPERATURE:"); Serial.println(temperature, 2);
+  Serial.print(",TEMPERATURE:"); Serial.print(temperature, 2);
+  Serial.print(",MODE:"); Serial.println(current_mode);
 }
 
 void handleBackendCommands() {

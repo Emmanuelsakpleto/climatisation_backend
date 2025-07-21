@@ -84,7 +84,7 @@ def read_arduino_data():
             line = arduino.readline().decode('utf-8').strip()
             if not line:
                 raise Exception("Aucune donnée reçue")
-            # Format attendu: DEBIT:xx,PRESSION:xx,NIVEAU:xx,ENSOLEILLEMENT:xx,TEMPERATURE:xx
+            # Format attendu: DEBIT:xx,PRESSION:xx,NIVEAU:xx,ENSOLEILLEMENT:xx,TEMPERATURE:xx,MODE:xxx
             data = {}
             pairs = line.split(',')
             for pair in pairs:
@@ -101,6 +101,8 @@ def read_arduino_data():
                         data['ensoleillement'] = float(value)
                     elif key == 'TEMPERATURE':
                         data['temperature'] = float(value)
+                    elif key == 'MODE':
+                        data['mode_arduino'] = value.strip()
             # Vérifier que toutes les données sont présentes
             required = ['debit', 'pression', 'niveau_eau', 'ensoleillement', 'temperature']
             if all(k in data for k in required):
@@ -113,6 +115,11 @@ def read_arduino_data():
                 system_data['humidity'] = round(65 + random.uniform(-5, 5), 1)
                 system_data['leak_detected'] = (data['pression'] < 1.5 and data['niveau_eau'] < 50 and data['debit'] < 30)
                 system_data['last_update'] = datetime.now().isoformat()
+                # Stocker le mode Arduino si présent
+                if 'mode_arduino' in data:
+                    system_data['mode_arduino'] = data['mode_arduino']
+                else:
+                    system_data['mode_arduino'] = None
                 logger.info(f"[DATA] Arduino: {line}")
                 return
             else:
@@ -182,6 +189,7 @@ def get_system_status():
     response_data = {
         "status": "online",
         "mode": recommended_mode,
+        "mode_arduino": system_data.get("mode_arduino"),
         "temperature": system_data["temperature"],
         "humidity": system_data["humidity"],
         "pression": system_data.get("pression_bars", system_data["pressure"] / 1000),
